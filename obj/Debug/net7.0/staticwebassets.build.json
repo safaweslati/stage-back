@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "GqBeg3b8wVbHzrqEDqV4YvCe319YdLfNYghwcQvKxq0=",
+  "Source": "stage-api",
+  "BasePath": "_content/stage-api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
