@@ -16,6 +16,9 @@ namespace stage_api
 
             builder.Services.AddControllers();
             builder.Services.AddScoped<AuthenticationService>();
+            builder.Services.AddScoped<DataProcessingService>();
+            builder.Services.AddScoped<FileUploadService>();
+
             builder.Services.AddDbContext<UserContext>(opt =>
            opt.UseInMemoryDatabase("Users"));
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -33,8 +36,9 @@ namespace stage_api
                     });
             });
 
-            builder.Services.AddDbContext<dbContext>(options =>
-              options.UseSqlite("Data Source=C:\\Users\\safaw\\Desktop\\Stage\\stage-db.db;"));
+           builder.Services.AddDbContext<dbContext>(options =>
+               options.UseSqlite("Data Source=C:\\Users\\safaw\\Desktop\\Stage\\stage-db.db;"));
+           
 
 
             var app = builder.Build();
