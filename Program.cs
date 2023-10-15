@@ -19,11 +19,11 @@ namespace stage_api
             builder.Services.AddScoped<DataProcessingService>();
             builder.Services.AddScoped<FileUploadService>();
 
-            builder.Services.AddDbContext<UserContext>(opt =>
-           opt.UseInMemoryDatabase("Users"));
+          
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
+            builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 
             builder.Services.AddCors(options =>
             {
@@ -36,8 +36,15 @@ namespace stage_api
                     });
             });
 
-           builder.Services.AddDbContext<dbContext>(options =>
-               options.UseSqlite("Data Source=C:\\Users\\safaw\\Desktop\\Stage\\stage-db.db;"));
+
+            builder.Services.AddDbContext<dbContext>(options =>
+            {
+                options.UseSqlServer(builder.Configuration.GetConnectionString("DbConnection"));
+            });
+
+
+         //   builder.Services.AddDbContext<dbContext>(options =>
+           //    options.UseSqlite("Data Source=C:\\Users\\safaw\\Desktop\\Stage\\stage-db.db;"));
            
 
 

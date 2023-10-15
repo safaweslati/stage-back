@@ -67,7 +67,9 @@ namespace stage_api
                 };
 
                 _dbContext.Files.Add(uploadedFile);
+                Debug.WriteLine("after adding the file to the database");
                 _dbContext.SaveChanges();
+                Debug.WriteLine("after saving the changes ");
                 return "File saved successfully";
             }
             catch (Exception ex)

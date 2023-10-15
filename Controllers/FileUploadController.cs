@@ -65,6 +65,7 @@ namespace stage_api.Controllers
                 var fileSaveResult = await _fileUploadService.UploadExcelFile(formFile, fileDetails);
                 if (fileSaveResult.Contains("Error"))
                 {
+                    
                     return BadRequest(fileSaveResult);
                 }
             
@@ -94,13 +95,12 @@ namespace stage_api.Controllers
         [HttpGet("tables")]
         public async Task<IActionResult> GetTables()
         {
-
             using (var connection = _dbContext.Database.GetDbConnection())
             {
                 connection.Open();
 
                 var command = connection.CreateCommand();
-                command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name <> 'UploadedFiles' AND name <> 'sqlite_sequence';";
+                command.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_name <> 'UploadedFiles';";
 
                 using (var reader = command.ExecuteReader())
                 {
@@ -118,8 +118,8 @@ namespace stage_api.Controllers
                     return Ok(tableNames);
                 }
             }
-
         }
+
 
 
         [HttpGet("files")]
@@ -140,20 +140,19 @@ namespace stage_api.Controllers
                     return BadRequest("Table name is required.");
                 }
 
-
                 using (var connection = _dbContext.Database.GetDbConnection())
                 {
                     connection.Open();
 
                     var command = connection.CreateCommand();
-                    command.CommandText = $"PRAGMA table_info({table});";
+                    command.CommandText = $"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}';";
 
                     using (var reader = command.ExecuteReader())
                     {
                         var columnNames = new List<string>();
                         while (reader.Read())
                         {
-                            columnNames.Add(reader.GetString(reader.GetOrdinal("name")));
+                            columnNames.Add(reader.GetString(reader.GetOrdinal("column_name")));
                         }
 
                         return Ok(columnNames);
@@ -166,7 +165,8 @@ namespace stage_api.Controllers
             }
         }
 
-      
+
+
 
     }
 

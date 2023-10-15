@@ -41,9 +41,9 @@ namespace stage_api
                     int headerIndex = excelData[0].IndexOf(header);
 
                     dbFields[headerIndex] = dbField;
-                    string dbFieldType = GetDbTypeFromSQLite(dbField, destinationTable);
+                    string dbFieldType = GetDbTypeFromSqlServer(dbField, destinationTable);
 
-                 
+
 
                     foreach (var row in excelData)
                     {
@@ -106,7 +106,7 @@ namespace stage_api
                     {
                     var dbField = mappingForm[header];
                     var action = mappingForm["action" + header];
-                    string dbFieldType = GetDbTypeFromSQLite(dbField, destinationTable);
+                    string dbFieldType = GetDbTypeFromSqlServer(dbField, destinationTable);
                     int headerIndex = excelData[0].IndexOf(header);
 
 
@@ -140,10 +140,11 @@ namespace stage_api
 
         private bool IsNumericDbType(string dbFieldType)
         {
-            var numericDbTypes = new List<string> { "INTEGER", "REAL", "NUMERIC", "DECIMAL", "SMALLINT", "TINYINT", "BIGINT", "FLOAT", "DOUBLE", "INT", "DECIMAL" };
+            var numericDbTypes = new List<string> { "INT", "SMALLINT", "TINYINT", "BIGINT", "FLOAT", "REAL", "DECIMAL", "NUMERIC", "MONEY", "SMALLMONEY", "DOUBLE", "BIT" };
 
             return numericDbTypes.Contains(dbFieldType.ToUpper());
         }
+
 
         private string GenerateUniqueAggregationTableName(string destinationTable)
         {
@@ -164,120 +165,164 @@ namespace stage_api
 
         private void CreateAggregationResultsTable(string destinationTable, Dictionary<string, object> aggregationResults)
         {
-            using (var connection = _dbContext.Database.GetDbConnection())
+            using (var connection = new SqlConnection(_dbContext.Database.GetDbConnection().ConnectionString))
             {
-                connection.Open();
-                using (var command = connection.CreateCommand())
-                {
-                    if (string.IsNullOrEmpty(_uniqueAggregationTableName))
-                    {
-                        _uniqueAggregationTableName = GenerateUniqueAggregationTableName(destinationTable);
-                    }
-
-                    var tableName = _uniqueAggregationTableName;
-
-                    // Create the AggregationResults table if it doesn't exist
-                    var createTableSql = $"CREATE TABLE IF NOT EXISTS {tableName} (Id INTEGER PRIMARY KEY AUTOINCREMENT, ";
-
-                    foreach (var key in aggregationResults.Keys)
-                    {
-                        createTableSql += $"{key} DECIMAL, ";
-                    }
-
-                    createTableSql = createTableSql.TrimEnd(',', ' ') + ");";
-
-                    try
-                    {
-                        Debug.WriteLine(createTableSql);
-                        command.CommandText = createTableSql;
-                        command.ExecuteNonQuery();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("Error creating AggregationResults table: " + ex.Message);
-                        return; 
-                    }
-                }
-            }
-        }
-
-        private void StoreAggregationResults(string destinationTable, Dictionary<string, object> aggregationResults)
-        {
-            using (var connection = _dbContext.Database.GetDbConnection())
-            {
-                connection.Open();
-
-                var tableName = _uniqueAggregationTableName;
-
-                var insertSql = $"INSERT INTO {tableName} (";
-
-                var parameters = new List<DbParameter>();
-
-                foreach (var key in aggregationResults.Keys)
-                {
-                    insertSql += $"{key}, ";
-                    parameters.Add(new SqliteParameter($"@{key}", aggregationResults[key])); // Use SqlParameter consistently
-                }
-
-                insertSql = insertSql.TrimEnd(',', ' ') + ") VALUES (";
-
-                foreach (var key in aggregationResults.Keys)
-                {
-                    insertSql += $"@{key}, ";
-                }
-
-                insertSql = insertSql.TrimEnd(',', ' ') + ");";
-
-                Debug.WriteLine("Generated SQL: " + insertSql);
-
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = insertSql;
-
-                    // Add parameters
-                    foreach (var parameter in parameters)
-                    {
-                        command.Parameters.Add(parameter);
-                    }
-
-                    command.ExecuteNonQuery();
-                }
-            }
-        }
-
-
-        private string GetDbTypeFromSQLite(string dbField, string table)
-        {
-            try
-            {
-                using (var connection = _dbContext.Database.GetDbConnection())
+                try
                 {
                     connection.Open();
 
-                    var command = connection.CreateCommand();
-                    command.CommandText = $"PRAGMA table_info({table});";
-
-                    using (var reader = command.ExecuteReader())
+                    using (var command = connection.CreateCommand())
                     {
-                        while (reader.Read())
+                        if (string.IsNullOrEmpty(_uniqueAggregationTableName))
                         {
-                            string columnName = reader["name"].ToString();
-                            if (columnName.Equals(dbField, StringComparison.OrdinalIgnoreCase))
+                            _uniqueAggregationTableName = GenerateUniqueAggregationTableName(destinationTable);
+                        }
+
+                        var tableName = _uniqueAggregationTableName;
+
+                        // Create the AggregationResults table
+                        var createTableSql = $"CREATE TABLE {tableName} (Id INT PRIMARY KEY IDENTITY, ";
+
+                        foreach (var key in aggregationResults.Keys)
+                        {
+                            createTableSql += $"{key} DECIMAL, ";
+                        }
+
+                        createTableSql = createTableSql.TrimEnd(',', ' ') + ");";
+
+                        try
+                        {
+                            Debug.WriteLine(createTableSql);
+                            command.CommandText = createTableSql;
+                            command.ExecuteNonQuery();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error creating AggregationResults table: {ex.Message}");
+                            Debug.WriteLine($"StackTrace: {ex.StackTrace}");
+                            return;
+                        }
+                    }
+                }
+                finally
+                {
+                    // Ensure the connection is closed after use
+                    if (connection.State == ConnectionState.Open)
+                    {
+                        connection.Close();
+                    }
+                }
+            }
+        }
+
+
+
+
+        private void StoreAggregationResults(string destinationTable, Dictionary<string, object> aggregationResults)
+        {
+            using (var connection = new SqlConnection(_dbContext.Database.GetDbConnection().ConnectionString))
+            {
+                try
+                {
+                    connection.Open();
+
+                    var tableName = _uniqueAggregationTableName;
+
+                    var insertSql = $"INSERT INTO {tableName} (";
+
+                    var parameters = new List<DbParameter>();
+
+                    foreach (var key in aggregationResults.Keys)
+                    {
+                        insertSql += $"{key}, ";
+                        parameters.Add(new SqlParameter($"@{key}", aggregationResults[key])); // Use SqlParameter consistently
+                    }
+
+                    insertSql = insertSql.TrimEnd(',', ' ') + ") VALUES (";
+
+                    foreach (var key in aggregationResults.Keys)
+                    {
+                        insertSql += $"@{key}, ";
+                    }
+
+                    insertSql = insertSql.TrimEnd(',', ' ') + ");";
+
+                    Debug.WriteLine("Generated SQL: " + insertSql);
+
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = insertSql;
+
+                        // Add parameters
+                        foreach (var parameter in parameters)
+                        {
+                            command.Parameters.Add(parameter);
+                        }
+
+                        command.ExecuteNonQuery();
+                    }
+                }
+                finally
+                {
+                    // Ensure the connection is closed after use
+                    if (connection.State == ConnectionState.Open)
+                    {
+                        connection.Close();
+                    }
+                }
+            }
+        }
+
+
+        private string GetDbTypeFromSqlServer(string dbField, string table)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_dbContext.Database.GetDbConnection().ConnectionString))
+                {
+                    try
+                    {
+
+                        if (connection.State != ConnectionState.Open)
+                        {
+                            connection.Open();
+                        }
+
+                        var command = connection.CreateCommand();
+                        command.CommandText = $"SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table}';";
+
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
                             {
-                                return reader["type"].ToString();
+                                string columnName = reader["COLUMN_NAME"].ToString();
+                                if (columnName.Equals(dbField, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return reader["DATA_TYPE"].ToString();
+                                }
                             }
+                        }
+                    }
+                    finally
+                    {
+                        // Ensure the connection is closed after use
+                        if (connection.State == ConnectionState.Open)
+                        {
+                            connection.Close();
                         }
                     }
                 }
             }
-
             catch (Exception ex)
             {
-                Debug.WriteLine($"SQLite Error: {ex.Message}");
+                Debug.WriteLine($"SQL Server Error: {ex.Message}");
             }
 
             return "Unknown";
         }
+
+
+
 
 
         private object ConvertAction(object value, string dbFieldType)
@@ -289,8 +334,10 @@ namespace stage_api
 
             switch (dbFieldType.ToLower())
             {
-                case "integer":
                 case "int":
+                case "smallint":
+                case "tinyint":
+                case "bigint":
 
                     int intValue;
                     if (int.TryParse(value.ToString(), out intValue))
@@ -305,34 +352,9 @@ namespace stage_api
 
                 case "real":
                 case "float":
-
-                    float floatValue;
-                    if (float.TryParse(value.ToString(), out floatValue))
-                    {
-                        return floatValue;
-                    }
-                    break;
-
-                case "boolean":
-                case "bool":
-                    bool boolValue;
-                    if (bool.TryParse(value.ToString(), out boolValue))
-                    {
-                        return boolValue;
-                    }
-                    break;
-
-
-                case "date":
-                    DateTime dateValue;
-                    if (DateTime.TryParse(value.ToString(), out dateValue))
-                    {
-                        return dateValue.ToString("dd/MM/yyyy");
-                    }
-                    break;
-
                 case "decimal":
-                case "double":
+                case "numeric":
+
                     decimal decimalValue;
                     if (decimal.TryParse(value.ToString(), out decimalValue))
                     {
@@ -340,15 +362,43 @@ namespace stage_api
                     }
                     break;
 
+                case "bit":
+
+                    bool boolValue;
+                    if (bool.TryParse(value.ToString(), out boolValue))
+                    {
+                        return boolValue;
+                    }
+                    break;
+
+                case "date":
+                    DateTime dateOnlyValue;
+                    if (DateTime.TryParse(value.ToString(), out dateOnlyValue))
+                    {
+                        return dateOnlyValue.Date.ToString("yyyy/MM/dd");
+
+                    }
+                    break;
+
+                case "datetime":
+                case "datetime2":
+                case "smalldatetime":
+                    DateTime dateTimeValue;
+                    if (DateTime.TryParse(value.ToString(), out dateTimeValue))
+                    {
+                        return dateTimeValue;
+                    }
+                    break;
+
+
                 case "uniqueidentifier":
-                case "guid":
+
                     Guid guidValue;
                     if (Guid.TryParse(value.ToString(), out guidValue))
                     {
                         return guidValue;
                     }
                     break;
-
 
                 default:
                     return value;
@@ -358,7 +408,8 @@ namespace stage_api
             return null;
         }
 
-       
+
+
 
         private bool FilterAction(object value, string filterOperator, string filterValue)
         {
@@ -459,25 +510,42 @@ namespace stage_api
                 switch (dataType.ToLower())
                 {
                     case "date":
-                        DateTime date1 = DateTime.Parse(value1.ToString());
-                        DateTime date2 = DateTime.Parse(value2.ToString());
+                        DateTime date1 = (DateTime)value1;
+                        DateTime date2 = (DateTime)value2;
                         return isAscending ? DateTime.Compare(date1, date2) : DateTime.Compare(date2, date1);
 
-                    case "integer":
-                        int int1 = int.Parse(value1.ToString());
-                        int int2 = int.Parse(value2.ToString());
-                        return isAscending ? int1.CompareTo(int2) : int2.CompareTo(int1);
+                    case "int":
+                    case "smallint":
+                    case "bigint":
+                        long long1 = Convert.ToInt64(value1);
+                        long long2 = Convert.ToInt64(value2);
+                        return isAscending ? long1.CompareTo(long2) : long2.CompareTo(long1);
+
+                    case "tinyint":
+                        byte byte1 = Convert.ToByte(value1);
+                        byte byte2 = Convert.ToByte(value2);
+                        return isAscending ? byte1.CompareTo(byte2) : byte2.CompareTo(byte1);
 
                     case "float":
-                        float float1 = float.Parse(value1.ToString());
-                        float float2 = float.Parse(value2.ToString());
-                        return isAscending ? float1.CompareTo(float2) : float2.CompareTo(float1);
+                    case "real":
+                    case "money":
+                    case "smallmoney":
+                        double double1 = Convert.ToDouble(value1);
+                        double double2 = Convert.ToDouble(value2);
+                        return isAscending ? double1.CompareTo(double2) : double2.CompareTo(double1);
+
+                    case "decimal":
+                        decimal decimal1 = Convert.ToDecimal(value1);
+                        decimal decimal2 = Convert.ToDecimal(value2);
+                        return isAscending ? decimal1.CompareTo(decimal2) : decimal2.CompareTo(decimal1);
+
 
                     default:
                         string str1 = value1.ToString();
                         string str2 = value2.ToString();
                         return isAscending ? string.Compare(str1, str2, StringComparison.OrdinalIgnoreCase) : string.Compare(str2, str1, StringComparison.OrdinalIgnoreCase);
                 }
+
             });
         }
 
@@ -528,48 +596,71 @@ namespace stage_api
 
             return transformedData;
         }
-      
+
 
 
         private void InsertDataIntoDatabase(List<List<object>> transformedData, string destinationTable, string columns)
         {
-            using (var connection = _dbContext.Database.GetDbConnection())
+            Debug.WriteLine("inside the insert");
+
+            // Use a new SqlConnection instance with the correct connection string
+            using (var connection = new SqlConnection(_dbContext.Database.GetDbConnection().ConnectionString))
             {
-                connection.Open();
-                Debug.WriteLine("conn opened");
-
-                using (var transaction = connection.BeginTransaction())
+                try
                 {
-                    try
+                    if (connection == null)
                     {
-                        Debug.WriteLine("transaction began");
+                        Debug.WriteLine("Connection is null.");
+                    }
 
-                        for (int i = 0; i < transformedData.Count; i++)
+                    Debug.WriteLine(connection.ConnectionString);
+
+                    connection.Open();
+                    Debug.WriteLine("conn opened");
+
+                    using (var transaction = connection.BeginTransaction())
+                    {
+                        try
                         {
-                            var values = string.Join(", ", transformedData[i].Select(value => $"'{value}'"));
-                            var insertSql = $"INSERT INTO {destinationTable} ({columns}) VALUES ({values})";
-                            Debug.WriteLine(insertSql);
+                            Debug.WriteLine("transaction began");
 
-                            using (var command = connection.CreateCommand())
+                            for (int i = 0; i < transformedData.Count; i++)
                             {
-                                command.CommandText = insertSql;
-                                command.CommandType = CommandType.Text;
-                                command.ExecuteNonQuery();
-                            }
-                        }
+                                var values = string.Join(", ", transformedData[i].Select(value => $"'{value}'"));
+                                var insertSql = $"INSERT INTO {destinationTable} ({columns}) VALUES ({values})";
+                                Debug.WriteLine(insertSql);
 
-                        transaction.Commit();
+                                using (var command = connection.CreateCommand())
+                                {
+                                    command.Transaction = transaction; 
+                                    command.CommandText = insertSql;
+                                    command.CommandType = CommandType.Text;
+                                    command.ExecuteNonQuery();
+                                }
+                            }
+
+                            transaction.Commit();
+                        }
+                        catch (Exception ex)
+                        {
+                            transaction.Rollback();
+                            Debug.WriteLine($"Error: {ex.Message}");
+                            throw;
+                        }
                     }
-                    catch (Exception ex)
+                }
+                finally
+                {
+                    // Ensure the connection is closed after use
+                    if (connection.State == ConnectionState.Open)
                     {
-                        transaction.Rollback();
-                        Debug.WriteLine($"SQLite Error: {ex.Message}");
-                        throw;
+                        connection.Close();
                     }
-            
                 }
             }
         }
-    }
 
+    }
 }
+
+
